@@ -1,56 +1,63 @@
-import React from "react";
+import React from 'react'
 
-export function Navbar({ currentView, setView }) {
+export function Navbar({ currentView, setView, onNavigateSection }) {
   return (
-    <header className="bg-[#0e0e0e] border-b border-neutral-800 text-white sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
-        {/* Logo */}
-        <div
-          onClick={() => setView("home")}
-          className="flex items-center gap-2 cursor-pointer select-none"
+    <header className="bg-[#0a0a0a] border-b border-neutral-800 sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
+        
+        {/* Logo SERVI+ */}
+        <div 
+          onClick={() => { setView('home'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
+          className="flex items-center gap-2 cursor-pointer"
         >
           <div className="bg-[#eab308] text-black font-black text-xl px-2.5 py-1 rounded-sm">
             S+
           </div>
-          <span className="font-black text-2xl tracking-wider">SERVI+</span>
+          <span className="text-white font-black text-2xl tracking-wider">SERVI+</span>
         </div>
 
         {/* Links de Navegação */}
-        <nav className="hidden md:flex items-center gap-8 text-sm font-bold tracking-wide">
-          <button
-            onClick={() => setView("home")}
-            className={`hover:text-[#eab308] transition ${currentView === "home" ? "text-[#eab308]" : "text-neutral-300"}`}
+        <nav className="hidden md:flex items-center gap-8 font-bold uppercase tracking-wider text-xs">
+          <button 
+            onClick={() => { setView('home'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
+            className={`${currentView === 'home' ? 'text-[#eab308]' : 'text-neutral-300 hover:text-white'} transition cursor-pointer`}
           >
             ENCONTRAR
           </button>
-          <button
-            onClick={() => setView("home")}
-            className="hover:text-[#eab308] transition text-neutral-300"
+
+          <button 
+            onClick={() => onNavigateSection('categorias')} 
+            className="text-neutral-300 hover:text-[#eab308] transition cursor-pointer"
           >
             CATEGORIAS
           </button>
-          <button
-            onClick={() => setView("profissionais")}
-            className={`hover:text-[#eab308] transition ${currentView === "profissionais" ? "text-[#eab308]" : "text-neutral-300"}`}
+
+          <button 
+            onClick={() => setView('profissionais')} 
+            className={`${currentView === 'profissionais' ? 'text-[#eab308]' : 'text-neutral-300 hover:text-white'} transition cursor-pointer`}
           >
             PROFISSIONAIS
           </button>
-          <button
-            onClick={() => setView("home")}
-            className="hover:text-[#eab308] transition text-neutral-300"
+
+          <button 
+            onClick={() => onNavigateSection('como-funciona')} 
+            className="text-neutral-300 hover:text-[#eab308] transition cursor-pointer"
           >
             COMO FUNCIONA
           </button>
         </nav>
 
-        {/* Botão de Cadastro */}
-        <button
-          onClick={() => setView("cadastrar")}
-          className="bg-[#eab308] hover:bg-yellow-500 text-black font-bold px-5 py-2.5 rounded text-sm transition"
-        >
-          Cadastre-se
-        </button>
+        {/* Botão Cadastre-se */}
+        <div>
+          <button 
+            onClick={() => setView('cadastrar')} 
+            className="bg-[#eab308] hover:bg-yellow-500 text-black font-black uppercase text-xs tracking-wider px-5 py-2.5 rounded transition cursor-pointer"
+          >
+            Cadastre-se
+          </button>
+        </div>
+
       </div>
     </header>
-  );
+  )
 }
