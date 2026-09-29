@@ -1,6 +1,6 @@
 import React from 'react'
 
-export function Navbar({ currentView, setView, onNavigateSection }) {
+export function Navbar({ currentView, setView, onNavigateSection, user }) {
   return (
     <header className="bg-[#0a0a0a] border-b border-neutral-800 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
@@ -47,14 +47,32 @@ export function Navbar({ currentView, setView, onNavigateSection }) {
           </button>
         </nav>
 
-        {/* Botão Cadastre-se */}
-        <div>
-          <button 
-            onClick={() => setView('cadastrar')} 
-            className="bg-[#eab308] hover:bg-yellow-500 text-black font-black uppercase text-xs tracking-wider px-5 py-2.5 rounded transition cursor-pointer"
-          >
-            Cadastre-se
-          </button>
+        {/* Botões de Acesso e Perfil */}
+        <div className="flex items-center gap-3">
+          {user ? (
+            <button 
+              onClick={() => setView('portal')}
+              className="bg-[#eab308] hover:bg-yellow-500 text-black font-black uppercase text-xs px-4 py-2 rounded transition cursor-pointer"
+            >
+              Meu Painel
+            </button>
+          ) : (
+            <>
+              <button 
+                onClick={() => setView('login')}
+                className="text-neutral-300 hover:text-white text-xs font-bold uppercase px-3 py-2 transition cursor-pointer"
+              >
+                Entrar
+              </button>
+
+              <button
+  onClick={() => setView('cadastrar')}
+  className="bg-[#eab308] hover:bg-yellow-500 text-black font-black uppercase text-xs px-4 py-2.5 rounded transition cursor-pointer"
+>
+  Criar Conta
+</button>
+            </>
+          )}
         </div>
 
       </div>

@@ -57,3 +57,19 @@ export async function createServiceRequest(
   }
   return data;
 }
+
+// Adicione no final do arquivo src/services/profiles.js
+
+export async function updateProfile(profileId, updateData) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(updateData)
+    .eq('id', profileId)
+    .select()
+
+  if (error) {
+    console.error('Erro ao atualizar perfil:', error)
+    throw error
+  }
+  return data
+}
