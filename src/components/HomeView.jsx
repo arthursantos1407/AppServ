@@ -6,18 +6,18 @@ import {
 } from 'lucide-react'
 
 const categories = [
-  { name: 'ELETRICISTA', count: '128 profissionais', icon: Zap },
-  { name: 'ENCANADOR', count: '95 profissionais', icon: Wrench },
-  { name: 'PINTOR', count: '74 profissionais', icon: Paintbrush },
-  { name: 'PEDREIRO', count: '112 profissionais', icon: Hammer },
-  { name: 'DIARISTA', count: '156 profissionais', icon: Home },
-  { name: 'JARDINEIRO', count: '89 profissionais', icon: Trees },
-  { name: 'TÉC. INFORMÁTICA', count: '67 profissionais', icon: Laptop },
-  { name: 'MECÂNICO', count: '45 profissionais', icon: Car },
-  { name: 'BARBEIRO', count: '59 profissionais', icon: Scissors },
-  { name: 'PROFESSOR', count: '42 profissionais', icon: GraduationCap },
-  { name: 'CUIDADOR DE ANIMAIS', count: '33 profissionais', icon: Dog },
-  { name: 'MONTADOR DE MÓVEIS', count: '51 profissionais', icon: Package },
+  { name: 'ELETRICISTA', icon: Zap },
+  { name: 'ENCANADOR', icon: Wrench },
+  { name: 'PINTOR', icon: Paintbrush },
+  { name: 'PEDREIRO', icon: Hammer },
+  { name: 'DIARISTA', icon: Home },
+  { name: 'JARDINEIRO', icon: Trees },
+  { name: 'TÉC. INFORMÁTICA', icon: Laptop },
+  { name: 'MECÂNICO', icon: Car },
+  { name: 'BARBEIRO', icon: Scissors },
+  { name: 'PROFESSOR', icon: GraduationCap },
+  { name: 'CUIDADOR DE ANIMAIS', icon: Dog },
+  { name: 'MONTADOR DE MÓVEIS', icon: Package },
 ]
 
 export function HomeView({ profiles, onSelectCategory, onSelectProfessional, setView }) {

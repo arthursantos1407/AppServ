@@ -23,6 +23,8 @@ export function ProfessionalsView({
     return 0;
   });
 
+  const professionalProfiles = profiles.filter(profile => profile.role === 'professional')
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-12">
       {/* Cabeçalho de Resultados e Ordenação (Exatamente como no vídeo a 00:03) */}

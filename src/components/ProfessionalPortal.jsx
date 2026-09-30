@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 
 export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
-  const [activeTab, setActiveTab] = useState('requests') // 'requests' | 'gallery' | 'settings'
+  const [activeTab, setActiveTab] = useState('requests')
   const [profile, setProfile] = useState(null)
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
@@ -103,7 +103,6 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
       const fileName = `avatar_${user.id}_${Date.now()}.${fileExt}`
       const filePath = `${fileName}`
 
-      // Envia para o bucket 'avatars' (ou 'gallery' caso prefira usar o mesmo)
       const { error: uploadError } = await supabase.storage
         .from('avatars')
         .upload(filePath, file, { upsert: true })
@@ -117,7 +116,6 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
       const publicUrl = data.publicUrl
       setAvatarUrl(publicUrl)
 
-      // Atualiza automaticamente no banco de dados
       await updateProfile(user.id, { avatar_url: publicUrl })
     } catch (error) {
       alert('Erro ao enviar foto de perfil. Verifique se o bucket "avatars" existe no Supabase Storage.')
@@ -207,7 +205,6 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
           
           <div className="flex items-center gap-3">
-            {/* Foto ou Avatar do topo */}
             {avatarUrl ? (
               <img src={avatarUrl} alt="Foto de perfil" className="w-10 h-10 rounded-full object-cover border border-[#eab308]" />
             ) : (
@@ -315,7 +312,9 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
                         <div key={req.id} className="bg-[#18181b] border border-neutral-800 p-6 rounded-lg space-y-3">
                           <div className="flex justify-between items-center border-b border-neutral-800 pb-3">
                             <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded ${
-                              req.status === 'ACEITO' 
+                              req.status === 'CONCLUIDO'
+                                ? 'bg-blue-500/10 text-blue-400 border border-blue-500/30'
+                                : req.status === 'ACEITO' || req.status === 'AGUARDANDO_CONCLUSAO'
                                 ? 'bg-green-500/10 text-green-400 border border-green-500/30' 
                                 : 'bg-yellow-500/10 text-[#eab308] border border-yellow-500/20'
                             }`}>
@@ -333,7 +332,7 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
                           </div>
 
                           <div className="pt-2 flex flex-wrap items-center gap-3">
-                            {req.status === 'ACEITO' ? (
+                            {req.status === 'ACEITO' || req.status === 'AGUARDANDO_CONCLUSAO' ? (
                               <button 
                                 key={`chat-btn-${req.id}`}
                                 onClick={() => setSelectedChatRequest(req)}
@@ -341,6 +340,15 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
                               >
                                 <MessageSquare className="w-4 h-4" />
                                 <span>Abrir Chat WhatsApp</span>
+                              </button>
+                            ) : req.status === 'CONCLUIDO' ? (
+                              <button 
+                                key={`chat-btn-concluido-${req.id}`}
+                                onClick={() => setSelectedChatRequest(req)}
+                                className="bg-neutral-800 hover:bg-neutral-700 text-white font-black uppercase text-xs px-4 py-2.5 rounded flex items-center gap-2 border border-neutral-700 transition cursor-pointer"
+                              >
+                                <MessageSquare className="w-4 h-4 text-[#00a884]" />
+                                <span>Ver / Encerrar Chat</span>
                               </button>
                             ) : (
                               <button 
@@ -433,7 +441,6 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
                     </p>
                   </div>
 
-                  {/*Input oculto para foto de perfil */}
                   <input 
                     type="file" 
                     accept="image/*" 
@@ -479,7 +486,7 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
                     </div>
                   </div>
 
-                  {/* OUTROS DADOS DO PERFIL */}
+                  {/* DADOS DO PERFIL */}
                   <div className="bg-[#18181b] border border-neutral-800 p-6 rounded-lg space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                       <div>
@@ -557,7 +564,7 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
 
       </div>
 
-      {/* Modal do Chat estilo WhatsApp */}
+      {/* Modal do Chat */}
       {selectedChatRequest && (
         <ChatModal 
           request={selectedChatRequest}

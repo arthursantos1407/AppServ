@@ -20,11 +20,11 @@ export default function App() {
   const [userRole, setUserRole] = useState(null) // 'client' ou 'professional'
 
   useEffect(() => {
-    // 1. Verifica se já existe um utilizador autenticado ao carregar a página
+    // 1. Verifica utilizador autenticado ao carregar a página
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user)
       if (user) {
-        fetchUserRole(user.id)
+        fetchUserRole(user.id, user)
       }
     })
 
@@ -33,7 +33,7 @@ export default function App() {
       const currentUser = session?.user || null
       setUser(currentUser)
       if (currentUser) {
-        fetchUserRole(currentUser.id)
+        fetchUserRole(currentUser.id, currentUser)
       } else {
         setUserRole(null)
       }
@@ -44,15 +44,18 @@ export default function App() {
     return () => subscription.unsubscribe()
   }, [categoryFilter])
 
-  // Procura a 'role' do utilizador na tabela 'profiles'
-  const fetchUserRole = async (userId) => {
+  // Procura a 'role' do utilizador na tabela 'profiles' ou nos metadados do Auth
+  const fetchUserRole = async (userId, userObj = null) => {
     const { data } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', userId)
       .maybeSingle()
 
-    setUserRole(data?.role || 'client')
+    // Tenta obter da tabela 'profiles'. Se ainda não existir no momento, lê os metadados
+    const resolvedRole = data?.role || userObj?.user_metadata?.role || 'client'
+    setUserRole(resolvedRole)
+    return resolvedRole
   }
 
   const loadProfiles = async (category = null) => {
@@ -92,7 +95,6 @@ export default function App() {
 
   // SE O UTILIZADOR ESTIVER LOGADO E NA VISÃO 'PORTAL'
   if (user && currentView === 'portal') {
-    // Se for Cliente, exibe o ClientPortal
     if (userRole === 'client') {
       return (
         <ClientPortal 
@@ -103,7 +105,6 @@ export default function App() {
       )
     }
 
-    // Se for Profissional, exibe o ProfessionalPortal
     return (
       <ProfessionalPortal 
         user={user} 
@@ -113,7 +114,7 @@ export default function App() {
     )
   }
 
-  // VISÃO PÚBLICA DO SITE (com Navbar e Footer)
+  // VISÃO PÚBLICA DO SITE
   return (
     <div className="min-h-screen bg-[#0e0e0e] text-white flex flex-col justify-between">
       <div>
@@ -151,14 +152,25 @@ export default function App() {
           )}
 
           {currentView === 'cadastrar' && (
-            <RegisterView onSuccess={() => { setCategoryFilter(null); loadProfiles(); setView('profissionais'); }} />
+            <RegisterView 
+              onSuccess={async () => { 
+                setCategoryFilter(null); 
+                await loadProfiles(); 
+                const { data: { user: currentUser } } = await supabase.auth.getUser();
+                if (currentUser) {
+                  setUser(currentUser);
+                  await fetchUserRole(currentUser.id, currentUser);
+                }
+                setView('portal'); 
+              }} 
+            />
           )}
 
           {currentView === 'login' && (
             <LoginView 
               onLoginSuccess={async (loggedUser) => { 
                 setUser(loggedUser)
-                await fetchUserRole(loggedUser.id)
+                await fetchUserRole(loggedUser.id, loggedUser)
                 setView('portal')
               }} 
             />

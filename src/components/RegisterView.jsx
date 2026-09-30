@@ -18,11 +18,11 @@ export function RegisterView({ onSuccess }) {
   const [category, setCategory] = useState('')
   const [city, setCity] = useState('')
   const [priceStartingAt, setPriceStartingAt] = useState('')
+  const [yearsOfExperience, setYearsOfExperience] = useState('')
   const [bio, setBio] = useState('')
 
   const avatarFileInputRef = useRef(null)
 
-  // Upload exclusivo por seleção de ficheiro
   const handleAvatarUpload = async (e) => {
     try {
       setUploadingAvatar(true)
@@ -44,7 +44,7 @@ export function RegisterView({ onSuccess }) {
 
       setAvatarUrl(data.publicUrl)
     } catch (error) {
-      alert('Erro ao carregar a imagem. Certifique-se de que o bucket "avatars" existe e está configurado como público no Supabase.')
+      alert('Erro ao carregar a imagem. Certifique-se de que o bucket "avatars" existe e é público.')
       console.error(error)
     } finally {
       setUploadingAvatar(false)
@@ -64,7 +64,6 @@ export function RegisterView({ onSuccess }) {
     setErrorMsg('')
 
     try {
-      // 1. Criar utilizador no Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -79,19 +78,19 @@ export function RegisterView({ onSuccess }) {
       if (authError) throw authError
 
       if (authData.user) {
-        // 2. Criar registo na tabela profiles
         const profilePayload = {
           id: authData.user.id,
           full_name: fullName,
           email: email,
           role: role,
           ...(role === 'professional' && {
-            avatar_url: avatarUrl,
-            category,
-            city,
-            location: city,
+            avatar_url: avatarUrl || null,
+            category: category || null,
+            city: city || null,
+            location: city || null,
             price_starting_at: parseFloat(priceStartingAt) || 0,
-            bio,
+            years_of_experience: parseInt(yearsOfExperience) || 0,
+            bio: bio || null,
           }),
         }
 
@@ -114,7 +113,6 @@ export function RegisterView({ onSuccess }) {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-12">
-      {/* SELEÇÃO DO TIPO DE CONTA */}
       {!role && (
         <div className="space-y-8 text-center">
           <div>
@@ -164,7 +162,6 @@ export function RegisterView({ onSuccess }) {
         </div>
       )}
 
-      {/* FORMULÁRIO DE CADASTRO */}
       {role && (
         <div className="bg-[#18181b] border border-neutral-800 p-8 rounded-2xl space-y-6">
           <button
@@ -193,8 +190,6 @@ export function RegisterView({ onSuccess }) {
           )}
 
           <form onSubmit={handleRegister} className="space-y-4">
-            
-            {/* CAMPO DE FOTO DE PERFIL EXCLUSIVO POR UPLOAD */}
             {role === 'professional' && (
               <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-xl flex flex-col sm:flex-row items-center gap-4">
                 <input 
@@ -286,7 +281,7 @@ export function RegisterView({ onSuccess }) {
 
             {role === 'professional' && (
               <>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
                   <div>
                     <label className="block text-xs font-bold uppercase text-neutral-400 mb-1">Categoria</label>
                     <input
@@ -319,6 +314,19 @@ export function RegisterView({ onSuccess }) {
                       placeholder="50"
                       value={priceStartingAt}
                       onChange={(e) => setPriceStartingAt(e.target.value)}
+                      className="w-full bg-neutral-900 border border-neutral-800 rounded p-3 text-xs text-white focus:outline-none focus:border-[#eab308]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase text-neutral-400 mb-1">Anos de Experiência</label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      placeholder="Ex: 5"
+                      value={yearsOfExperience}
+                      onChange={(e) => setYearsOfExperience(e.target.value)}
                       className="w-full bg-neutral-900 border border-neutral-800 rounded p-3 text-xs text-white focus:outline-none focus:border-[#eab308]"
                     />
                   </div>

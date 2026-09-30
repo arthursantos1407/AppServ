@@ -2,27 +2,20 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { 
   Star, MapPin, Tag, ArrowLeft, Image as ImageIcon, 
-  MessageSquare, Send, CheckCircle2, Loader2, Calendar 
+  MessageSquare, Send, CheckCircle2, Loader2, Calendar, Briefcase 
 } from 'lucide-react'
 
 export function ProfileDetailView({ professional, profile, onBack }) {
-  // Unifica a propriedade para evitar erros caso venha como 'professional' ou 'profile'
   const profData = professional || profile || {}
 
   const [reviews, setReviews] = useState([])
   const [loadingReviews, setLoadingReviews] = useState(true)
 
-  // Estados do formulário de solicitação de orçamento
+  // Formulário de solicitação de orçamento
   const [requestDesc, setRequestDesc] = useState('')
   const [whenNeeded, setWhenNeeded] = useState('Urgente')
   const [sendingRequest, setSendingRequest] = useState(false)
   const [requestSuccess, setRequestSuccess] = useState(false)
-
-  // Estados do formulário de nova avaliação
-  const [clientName, setClientName] = useState('')
-  const [rating, setRating] = useState(5)
-  const [comment, setComment] = useState('')
-  const [submittingReview, setSubmittingReview] = useState(false)
 
   useEffect(() => {
     if (profData?.id) {
@@ -34,7 +27,7 @@ export function ProfileDetailView({ professional, profile, onBack }) {
     setLoadingReviews(true)
     const { data, error } = await supabase
       .from('reviews')
-      .select('*')
+      .select('*, profiles:client_id(full_name, avatar_url)')
       .eq('professional_id', profData.id)
       .order('created_at', { ascending: false })
 
@@ -44,15 +37,18 @@ export function ProfileDetailView({ professional, profile, onBack }) {
     setLoadingReviews(false)
   }
 
-  // Enviar Solicitação de Orçamento
   const handleSendRequest = async (e) => {
     e.preventDefault()
     setSendingRequest(true)
 
     try {
+      const { data: userData } = await supabase.auth.getUser()
+      const currentUserId = userData?.user?.id
+
       const { error } = await supabase.from('requests').insert([
         {
           professional_id: profData.id,
+          client_id: currentUserId || null,
           description: requestDesc,
           when_needed: whenNeeded,
           status: 'PENDENTE',
@@ -71,37 +67,6 @@ export function ProfileDetailView({ professional, profile, onBack }) {
     }
   }
 
-  // Enviar Nova Avaliação
-  const handleSendReview = async (e) => {
-    e.preventDefault()
-    setSubmittingReview(true)
-
-    try {
-      const { error } = await supabase.from('reviews').insert([
-        {
-          professional_id: profData.id,
-          client_name: clientName,
-          rating: parseInt(rating),
-          comment,
-        },
-      ])
-
-      if (error) throw error
-
-      alert('Avaliação enviada com sucesso!')
-      setClientName('')
-      setComment('')
-      setRating(5)
-      loadReviews()
-    } catch (err) {
-      alert('Erro ao enviar avaliação.')
-      console.error(err)
-    } finally {
-      setSubmittingReview(false)
-    }
-  }
-
-  // Média de Avaliações
   const averageRating = reviews.length > 0
     ? (reviews.reduce((acc, curr) => acc + curr.rating, 0) / reviews.length).toFixed(1)
     : 'Novo'
@@ -146,7 +111,10 @@ export function ProfileDetailView({ professional, profile, onBack }) {
                 <MapPin className="w-3.5 h-3.5 text-neutral-500" /> {profData.city || profData.location}
               </span>
               <span className="flex items-center gap-1">
-                <Tag className="w-3.5 h-3.5 text-neutral-500" /> A partir de: <strong className="text-white">R$ {profData.price_starting_at}</strong>
+                <Briefcase className="w-3.5 h-3.5 text-[#eab308]" /> {profData.years_of_experience || 0} anos de experiência
+              </span>
+              <span className="flex items-center gap-1">
+                <Tag className="w-3.5 h-3.5 text-neutral-500" /> A partir de: <strong className="text-white">R$ {profData.price_starting_at || 0}</strong>
               </span>
             </div>
 
@@ -158,7 +126,7 @@ export function ProfileDetailView({ professional, profile, onBack }) {
           </div>
         </div>
 
-        {/* GALERIA DE TRABALHOS */}
+        {/* Galeria de Trabalhos */}
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <ImageIcon className="w-5 h-5 text-[#eab308]" />
@@ -184,10 +152,10 @@ export function ProfileDetailView({ professional, profile, onBack }) {
           )}
         </section>
 
-        {/* SEÇÃO: SOLICITAÇÃO DE ORÇAMENTO */}
+        {/* Solicitação de Orçamento */}
         <section className="bg-[#18181b] border border-neutral-800 rounded-xl p-6 space-y-4">
           <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
-            <Send className="w-5 h-5 text-[#eab308]" /> Solicitar Orçamento Grátis
+            <Send className="w-5 h-5 text-[#eab308]" /> Solicitar Orçamento
           </h2>
 
           {requestSuccess ? (
@@ -240,7 +208,7 @@ export function ProfileDetailView({ professional, profile, onBack }) {
           )}
         </section>
 
-        {/* SEÇÃO DE AVALIAÇÕES */}
+        {/* Avaliações Autênticas */}
         <section className="space-y-6">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-black uppercase tracking-tight flex items-center gap-2">
@@ -248,73 +216,20 @@ export function ProfileDetailView({ professional, profile, onBack }) {
             </h2>
           </div>
 
-          {/* Form para Deixar Avaliação */}
-          <form onSubmit={handleSendReview} className="bg-[#18181b] border border-neutral-800 p-6 rounded-xl space-y-4">
-            <h3 className="text-xs font-bold uppercase text-neutral-300">Deixe sua avaliação</h3>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold uppercase text-neutral-400 mb-1">Seu Nome</label>
-                <input 
-                  type="text" 
-                  required
-                  value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
-                  placeholder="Ex: Maria Oliveira"
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded p-2.5 text-xs text-white focus:outline-none focus:border-[#eab308]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase text-neutral-400 mb-1">Nota (Estrelas)</label>
-                <select 
-                  value={rating}
-                  onChange={(e) => setRating(e.target.value)}
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded p-2.5 text-xs text-white focus:outline-none focus:border-[#eab308]"
-                >
-                  <option value={5}>⭐⭐⭐⭐⭐ (5 - Excelente)</option>
-                  <option value={4}>⭐⭐⭐⭐ (4 - Muito Bom)</option>
-                  <option value={3}>⭐⭐⭐ (3 - Bom)</option>
-                  <option value={2}>⭐⭐ (2 - Regular)</option>
-                  <option value={1}>⭐ (1 - Ruim)</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold uppercase text-neutral-400 mb-1">Comentário</label>
-              <textarea 
-                rows={2} 
-                required
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="Conte como foi sua experiência com este profissional..."
-                className="w-full bg-neutral-900 border border-neutral-800 rounded p-2.5 text-xs text-white focus:outline-none focus:border-[#eab308]"
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={submittingReview}
-              className="bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs py-2.5 px-5 rounded border border-neutral-700 transition flex items-center gap-2 cursor-pointer"
-            >
-              {submittingReview ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Publicar Avaliação'}
-            </button>
-          </form>
-
-          {/* Lista de Avaliações */}
           {loadingReviews ? (
             <div className="text-center text-xs text-neutral-500 py-4">Carregando avaliações...</div>
           ) : reviews.length === 0 ? (
             <div className="bg-[#18181b] border border-neutral-800 p-8 rounded-xl text-center text-xs text-neutral-500">
-              Nenhuma avaliação cadastrada até o momento. Seja o primeiro a avaliar!
+              Este profissional ainda não possui avaliações de serviços concluídos.
             </div>
           ) : (
             <div className="space-y-3">
               {reviews.map((rev) => (
                 <div key={rev.id} className="bg-[#18181b] border border-neutral-800 p-5 rounded-xl space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-white">{rev.client_name}</span>
+                    <span className="text-xs font-bold text-white">
+                      {rev.profiles?.full_name || rev.client_name || 'Cliente'}
+                    </span>
                     <div className="flex items-center gap-1">
                       {[...Array(5)].map((_, i) => (
                         <Star 
@@ -324,7 +239,7 @@ export function ProfileDetailView({ professional, profile, onBack }) {
                       ))}
                     </div>
                   </div>
-                  <p className="text-xs text-neutral-300 leading-relaxed">{rev.comment}</p>
+                  {rev.comment && <p className="text-xs text-neutral-300 leading-relaxed">{rev.comment}</p>}
                   <div className="text-[10px] text-neutral-500 flex items-center gap-1 pt-1">
                     <Calendar className="w-3 h-3" /> {new Date(rev.created_at).toLocaleDateString('pt-BR')}
                   </div>

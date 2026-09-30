@@ -1,7 +1,11 @@
 import { supabase } from "../lib/supabase";
 
 export async function fetchProfiles(categoryFilter = null, searchTerm = "") {
-  let query = supabase.from("profiles").select("*");
+  // Filtra apenas utilizadores com o role "professional"
+  let query = supabase
+    .from("profiles")
+    .select("*")
+    .eq("role", "professional");
 
   if (categoryFilter) {
     query = query.ilike("category", `%${categoryFilter}%`);
@@ -34,7 +38,6 @@ export async function createProfile(profileData) {
   return data;
 }
 
-// Nova função para salvar o pedido de serviço no Supabase
 export async function createServiceRequest(
   professionalId,
   description,
@@ -58,18 +61,16 @@ export async function createServiceRequest(
   return data;
 }
 
-// Adicione no final do arquivo src/services/profiles.js
-
 export async function updateProfile(profileId, updateData) {
   const { data, error } = await supabase
     .from('profiles')
     .update(updateData)
     .eq('id', profileId)
-    .select()
+    .select();
 
   if (error) {
-    console.error('Erro ao atualizar perfil:', error)
-    throw error
+    console.error('Erro ao atualizar perfil:', error);
+    throw error;
   }
-  return data
+  return data;
 }
