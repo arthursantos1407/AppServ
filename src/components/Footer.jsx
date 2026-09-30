@@ -7,7 +7,7 @@ export function Footer({ setView }) {
         {/* Logo e Slogan */}
         <div className="flex items-center gap-3">
           <div className="h-auto w-30">
-            <img src="public/icon.png" alt="" />
+            <img src="/icon.png" alt="" />
           </div>
           <span className="hidden sm:inline text-neutral-600">|</span>
           <p className="hidden sm:block text-neutral-500">

@@ -38,7 +38,7 @@ export function Navbar({ currentView, setView, onNavigateSection, user }) {
           className="flex items-center gap-2 cursor-pointer"
         >
           <div className="h-auto w-40">
-            <img src="public/icon.png" alt="Logo" />
+            <img src="/icon.png" alt="Logo" />
           </div>
         </div>
 
