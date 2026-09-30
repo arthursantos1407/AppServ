@@ -6,12 +6,9 @@ export function Footer({ setView }) {
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
         {/* Logo e Slogan */}
         <div className="flex items-center gap-3">
-          <div className="bg-[#eab308] text-black font-black text-sm px-2 py-0.5 rounded-sm">
-            S+
+          <div className="h-auto w-30">
+            <img src="public/icon.png" alt="" />
           </div>
-          <span className="text-white font-black tracking-wider text-base">
-            SERVI+
-          </span>
           <span className="hidden sm:inline text-neutral-600">|</span>
           <p className="hidden sm:block text-neutral-500">
             Conectando quem precisa com quem sabe fazer.
