@@ -17,6 +17,12 @@ export function Footer({ setView }) {
 
         {/* Links do Rodapé */}
         <div className="flex items-center gap-6 font-bold uppercase tracking-wider">
+          <button className="hover:text-[#eab308] transition">
+            <a href="https://wa.me/5532984521595?text=Ol%C3%A1%2C%20preciso%20de%20suporte%20em%20rela%C3%A7%C3%A3o%20ao%20meu%20atendimento."
+              target="_blank">
+              SUPORTE
+            </a>
+          </button>
           <button
             onClick={() => setView("home")}
             className="hover:text-[#eab308] transition"
