@@ -7,7 +7,29 @@ export function DashboardView() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1. Carga inicial dos pedidos
     loadRequests();
+
+    // 2. Subscrição em Tempo Real (Supabase Realtime)
+    const channel = supabase
+      .channel("realtime_dashboard_requests")
+      .on(
+        "postgres_changes",
+        {
+          event: "*", // Escuta criação (INSERT), atualização (UPDATE) e eliminação (DELETE)
+          schema: "public",
+          table: "requests",
+        },
+        () => {
+          loadRequests(); // Atualiza os dados no ecrã automaticamente
+        }
+      )
+      .subscribe();
+
+    // 3. Cancela a subscrição ao fechar ou sair do ecrã
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadRequests = async () => {
@@ -37,7 +59,7 @@ export function DashboardView() {
       ) : requests.length === 0 ? (
         <div className="bg-[#18181b] border border-neutral-800 p-10 rounded text-center">
           <p className="text-neutral-400">
-            Nenhuma solicitação recebida até o momento.
+            Nenhuma solicitação recebida até ao momento.
           </p>
         </div>
       ) : (

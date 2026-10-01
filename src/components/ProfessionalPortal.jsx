@@ -208,8 +208,8 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
             {avatarUrl ? (
               <img src={avatarUrl} alt="Foto de perfil" className="w-10 h-10 rounded-full object-cover border border-[#eab308]" />
             ) : (
-              <div className="bg-[#eab308] text-black font-black text-lg px-2.5 py-0.5 rounded-sm">
-                S+
+              <div className="h-auto w-10">
+                <img src="/favicon.jpg" alt="" />
               </div>
             )}
             <div>
@@ -339,7 +339,7 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
                                 className="bg-[#00a884] hover:bg-[#008f70] text-black font-black uppercase text-xs px-4 py-2.5 rounded flex items-center gap-2 transition cursor-pointer"
                               >
                                 <MessageSquare className="w-4 h-4" />
-                                <span>Abrir Chat WhatsApp</span>
+                                <span>Abrir Chat</span>
                               </button>
                             ) : req.status === 'CONCLUIDO' ? (
                               <button 
@@ -348,7 +348,7 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
                                 className="bg-neutral-800 hover:bg-neutral-700 text-white font-black uppercase text-xs px-4 py-2.5 rounded flex items-center gap-2 border border-neutral-700 transition cursor-pointer"
                               >
                                 <MessageSquare className="w-4 h-4 text-[#00a884]" />
-                                <span>Ver / Encerrar Chat</span>
+                                <span>Encerrar Chat</span>
                               </button>
                             ) : (
                               <button 
