@@ -15,7 +15,7 @@ export function ProfessionalCard({ professional, onSelect }) {
           <img
             src={professional.avatar_url}
             alt={professional.full_name}
-            className="w-full h-full object-cover object-center"
+            className="w-full h-full object-center object-contain"
           />
         </div>
 
