@@ -1,53 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { 
-  Send, X, CheckCheck, CheckCircle2, Star, Loader2, Clock, Trash2, 
-  DollarSign, CreditCard, QrCode, FileText, Copy, Check, Sparkles 
+import {
+  Send, X, CheckCheck, CheckCircle2, Star, Loader2, Clock, Trash2,
+  DollarSign, CreditCard, QrCode, FileText, Copy, Check, HelpCircle
 } from 'lucide-react'
-
-// Função auxiliar para gerar Payload Pix EMV Estático Válido para testes
-function calculateCRC16(payload) {
-  let crc = 0xFFFF;
-  for (let i = 0; i < payload.length; i++) {
-    crc ^= payload.charCodeAt(i) << 8;
-    for (let j = 0; j < 8; j++) {
-      if ((crc & 0x8000) !== 0) {
-        crc = (crc << 1) ^ 0x1021;
-      } else {
-        crc <<= 1;
-      }
-      crc &= 0xFFFF;
-    }
-  }
-  return crc.toString(16).toUpperCase().padStart(4, '0');
-}
-
-function generatePixPayload({ key, name, city, amount, txid = 'DEMO123' }) {
-  const cleanKey = key.replace(/\D/g, '');
-  const formattedAmount = parseFloat(amount || 0).toFixed(2);
-  
-  const merchantAccountInfo = [
-    '0014br.gov.bcb.pix',
-    `01${cleanKey.length.toString().padStart(2, '0')}${cleanKey}`
-  ].join('');
-
-  const parts = [
-    '000201',
-    `26${merchantAccountInfo.length.toString().padStart(2, '0')}${merchantAccountInfo}`,
-    '52040000',
-    '5303986',
-    `54${formattedAmount.length.toString().padStart(2, '0')}${formattedAmount}`,
-    '5802BR',
-    `59${name.length.toString().padStart(2, '0')}${name}`,
-    `60${city.length.toString().padStart(2, '0')}${city}`,
-    `62${(4 + txid.length).toString().padStart(2, '0')}05${txid.length.toString().padStart(2, '0')}${txid}`,
-    '6304'
-  ];
-
-  const rawPayload = parts.join('');
-  const crc = calculateCRC16(rawPayload);
-  return `${rawPayload}${crc}`;
-}
+import { PaymentModal } from './PaymentModal'
 
 export function ChatModal({ request, currentUserType, senderName, onClose }) {
   const [messages, setMessages] = useState([])
@@ -59,13 +16,9 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
   const [showPriceModal, setShowPriceModal] = useState(false)
   const [servicePrice, setServicePrice] = useState('')
   const [paymentData, setPaymentData] = useState(null)
-  
-  // Modais de Checkout
-  const [showCheckoutModal, setShowCheckoutModal] = useState(false)
-  const [checkoutStep, setCheckoutStep] = useState(1) // 1: Resumo, 2: Meio de Pagamento, 3: Pix
-  const [selectedMethod, setSelectedMethod] = useState('PIX')
-  const [copiedPix, setCopiedPix] = useState(false)
-  const [simulatingPayment, setSimulatingPayment] = useState(false)
+
+  // Modal de Checkout Novo (Pix, Cartão e Boleto)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
 
   // Estados de Avaliação
   const [showRatingModal, setShowRatingModal] = useState(false)
@@ -75,14 +28,13 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
 
   const chatEndRef = useRef(null)
 
-  // Gerar código Pix EMV válido com a sua chave
-  const pixCode = generatePixPayload({
-    key: '32984521595',
-    name: 'MARKETPLACE',
-    city: 'SAO PAULO',
-    amount: paymentData?.amount || 10.00,
-    txid: `REQ${request?.id || '123'}`
-  })
+  // Pega o código Pix real gerado e salvo na tabela payments
+  const pixCode = paymentData?.pix_code || ''
+
+  // Gera a imagem do QR Code com o payload oficial
+  const qrCodeUrl = pixCode
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(pixCode)}`
+    : ''
 
   useEffect(() => {
     if (request?.status) {
@@ -106,21 +58,28 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
       )
       .subscribe()
 
-    // Realtime para Pagamento
+    // Realtime para Pagamento (Escuta INSERT e UPDATE para atualizar o cliente instantaneamente)
     const paymentChannel = supabase
       .channel(`chat_payment_${request.id}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'payments', filter: `request_id=eq.${request.id}` },
-        (payload) => {
+        { event: '*', schema: 'public', table: 'payments', filter: `request_id=eq.${request.id}` },
+        
+          async (payload) => {
           const updatedPayment = payload.new
-          setPaymentData(updatedPayment)
+          if (updatedPayment) {
+            setPaymentData(updatedPayment)
+            setServicePrice(updatedPayment.amount?.toString() || '')
 
-          if (updatedPayment.status === 'EM_CUSTODIA') {
-            setShowCheckoutModal(false)
-            setCheckoutStep(1)
-            setRequestStatus('EM_ANDAMENTO')
-            loadMessages()
+            if (updatedPayment.status === 'EM_CUSTODIA') {
+              setShowPaymentModal(false)
+              setRequestStatus('EM_ANDAMENTO')
+              await supabase
+    .from('requests')
+    .update({ status: 'EM_ANDAMENTO' })
+    .eq('id', request.id)
+              loadMessages()
+            }
           }
         }
       )
@@ -178,40 +137,30 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
     ])
   }
 
-  // PROFISSIONAL: Define valor do serviço
+  // PROFISSIONAL: Envia proposta de preço chamando a Edge Function 'create-pix'
   const handleSendPriceProposal = async (e) => {
     e.preventDefault()
     const val = parseFloat(servicePrice)
     if (isNaN(val) || val <= 0) return alert('Insira um valor válido.')
 
-    const { data: existingPayment } = await supabase
-      .from('payments')
-      .select('id')
-      .eq('request_id', request.id)
-      .maybeSingle()
-
-    let error = null
-
-    if (existingPayment) {
-      const res = await supabase
-        .from('payments')
-        .update({ amount: val, status: 'PENDENTE_PAGAMENTO' })
-        .eq('id', existingPayment.id)
-      error = res.error
-    } else {
-      const res = await supabase.from('payments').insert([
-        {
-          request_id: request.id,
-          professional_id: request.professional_id,
-          client_id: request.client_id,
+    try {
+      // 1. Chama a Edge Function que gera o Pix no Asaas
+      const { data, error } = await supabase.functions.invoke('create-pix', {
+        body: {
+          requestId: request.id,
           amount: val,
-          status: 'PENDENTE_PAGAMENTO',
-        },
-      ])
-      error = res.error
-    }
+          professionalId: request.professional_id,
+          clientId: request.client_id
+        }
+      })
 
-    if (!error) {
+      if (error) throw new Error(error.message || 'Erro ao conectar ao servidor de pagamento.')
+
+      if (data && data.success === false) {
+        throw new Error(data.error || 'Não foi possível criar a cobrança Pix.')
+      }
+
+      // 2. Envia a mensagem do sistema no chat avisando sobre a cobrança
       await supabase.from('messages').insert([
         {
           request_id: request.id,
@@ -220,63 +169,13 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
           content: `💳 O profissional definiu o valor do serviço em R$ ${val.toFixed(2)}. Utilize o card de pagamento para concluir.`,
         },
       ])
+
       setShowPriceModal(false)
       loadPayment()
       loadMessages()
-    } else {
-      alert(`Erro ao salvar cobrança: ${error.message}`)
-    }
-  }
-
-  // SIMULAÇÃO DEMO: Botão para aprovar o pagamento manualmente
-  const handleSimulateSuccessfulPayment = async () => {
-    setSimulatingPayment(true)
-
-    try {
-      await supabase
-        .from('payments')
-        .update({ status: 'EM_CUSTODIA', payment_method: selectedMethod })
-        .eq('request_id', request.id)
-
-      const { data: wallet } = await supabase
-        .from('wallets')
-        .select('*')
-        .eq('professional_id', request.professional_id)
-        .maybeSingle()
-
-      const currentPending = parseFloat(wallet?.pending_balance || 0)
-      const amountToAdd = parseFloat(paymentData.amount)
-
-      await supabase.from('wallets').upsert({
-        professional_id: request.professional_id,
-        pending_balance: currentPending + amountToAdd,
-        updated_at: new Date().toISOString(),
-      })
-
-      await supabase
-        .from('requests')
-        .update({ status: 'EM_ANDAMENTO' })
-        .eq('id', request.id)
-
-      setRequestStatus('EM_ANDAMENTO')
-
-      await supabase.from('messages').insert([
-        {
-          request_id: request.id,
-          sender_type: 'client',
-          sender_name: 'Sistema',
-          content: `✅ Pagamento de R$ ${parseFloat(paymentData.amount).toFixed(2)} efetuado com sucesso via ${selectedMethod}! O valor está retido em custódia.`,
-        },
-      ])
-
-      setShowCheckoutModal(false)
-      setCheckoutStep(1)
-      loadPayment()
-      loadMessages()
     } catch (err) {
-      alert(`Erro na simulação: ${err.message}`)
-    } finally {
-      setSimulatingPayment(false)
+      console.error('Erro ao gerar cobrança Pix:', err)
+      alert(`Erro ao gerar cobrança Pix: ${err.message}`)
     }
   }
 
@@ -301,7 +200,8 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
     }
   }
 
-  // CLIENTE: Confirma conclusão
+  // CLIENTE: Confirma conclusão do serviço
+  // CLIENTE: Confirma conclusão do serviço
   const handleConfirmCompletion = async () => {
     const { error } = await supabase
       .from('requests')
@@ -310,6 +210,11 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
 
     if (!error) {
       if (paymentData && paymentData.status === 'EM_CUSTODIA') {
+        const grossAmount = parseFloat(paymentData.amount)
+
+        // ✅ Libera 100% do valor (sem desconto de comissão da plataforma)
+        const netAmount = grossAmount
+
         const { data: wallet } = await supabase
           .from('wallets')
           .select('*')
@@ -318,12 +223,12 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
 
         const currentPending = parseFloat(wallet?.pending_balance || 0)
         const currentAvailable = parseFloat(wallet?.available_balance || 0)
-        const amount = parseFloat(paymentData.amount)
 
+        // Move do saldo pendente para o saldo disponível
         await supabase.from('wallets').upsert({
           professional_id: request.professional_id,
-          pending_balance: Math.max(0, currentPending - amount),
-          available_balance: currentAvailable + amount,
+          pending_balance: Math.max(0, currentPending - netAmount),
+          available_balance: currentAvailable + netAmount,
           updated_at: new Date().toISOString(),
         })
 
@@ -374,17 +279,16 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
   }
 
   const handleCopyPix = () => {
+    if (!pixCode) return
     navigator.clipboard.writeText(pixCode)
     setCopiedPix(true)
     setTimeout(() => setCopiedPix(false), 3000)
   }
 
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(pixCode)}`
-
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
       <div className="bg-[#0b141a] border border-neutral-800 rounded-xl w-full max-w-2xl h-[85vh] flex flex-col overflow-hidden shadow-2xl relative">
-        
+
         {/* Cabeçalho */}
         <div className="bg-[#202c33] px-4 py-3 flex items-center justify-between border-b border-neutral-800">
           <div className="flex items-center gap-3">
@@ -404,9 +308,9 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
           <div className="flex items-center gap-2">
             {currentUserType === 'professional' && (
               <>
-                {/* O botão 'Cobrar Serviço' só é exibido se ainda NÃO existir cobrança gerada (!paymentData) */}
                 {requestStatus !== 'CONCLUIDO' && !paymentData && (
                   <button
+                    type="button"
                     onClick={() => setShowPriceModal(true)}
                     className="bg-[#00a884] hover:bg-[#008f70] text-black font-black text-xs px-3 py-1.5 rounded transition cursor-pointer flex items-center gap-1"
                   >
@@ -417,6 +321,7 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
 
                 {requestStatus !== 'CONCLUIDO' && requestStatus !== 'AGUARDANDO_CONCLUSAO' && (
                   <button
+                    type="button"
                     onClick={handleRequestCompletion}
                     className="bg-[#eab308] hover:bg-yellow-500 text-black font-black text-xs px-3 py-1.5 rounded transition cursor-pointer"
                   >
@@ -433,6 +338,7 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
 
                 {requestStatus === 'CONCLUIDO' && (
                   <button
+                    type="button"
                     onClick={handleCloseAndDeleteChat}
                     className="bg-red-600 hover:bg-red-700 text-white font-black text-xs px-3 py-1.5 rounded transition cursor-pointer flex items-center gap-1"
                   >
@@ -443,7 +349,8 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
               </>
             )}
 
-            <button 
+            <button
+              type="button"
               onClick={requestStatus === 'CONCLUIDO' && currentUserType === 'professional' ? handleCloseAndDeleteChat : onClose}
               className="text-neutral-400 hover:text-white transition p-2 cursor-pointer"
             >
@@ -459,6 +366,7 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
               O profissional solicitou a finalização deste serviço. Confirma que o trabalho foi concluído? O pagamento será libertado ao profissional.
             </p>
             <button
+              type="button"
               onClick={handleConfirmCompletion}
               className="bg-[#00a884] hover:bg-[#008f70] text-black font-black text-xs px-4 py-2 rounded uppercase cursor-pointer"
             >
@@ -474,6 +382,7 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
               Serviço concluído! Clique no botão para fechar e eliminar o histórico.
             </p>
             <button
+              type="button"
               onClick={handleCloseAndDeleteChat}
               className="bg-red-600 hover:bg-red-700 text-white font-black text-xs px-4 py-2.5 rounded uppercase cursor-pointer flex items-center justify-center gap-2 mx-auto"
             >
@@ -495,12 +404,12 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
 
         {/* Lista de Mensagens */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#0b141a]">
-          
+
           {/* Card de Cobrança no Chat para o Cliente */}
           {currentUserType === 'client' && paymentData && paymentData.status === 'PENDENTE_PAGAMENTO' && (
-            <div className="bg-[#18181b] border border-neutral-700 rounded-2xl p-5 max-w-sm mx-auto shadow-xl space-y-4 text-white">
+            <div key="payment-card-client" className="bg-[#18181b] border border-neutral-700 rounded-2xl p-5 max-w-sm mx-auto shadow-xl space-y-4 text-white">
               <h4 className="text-base font-bold border-b border-neutral-800 pb-2">Resumo da compra</h4>
-              
+
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between text-neutral-300">
                   <span>Produto / Serviço</span>
@@ -517,10 +426,8 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
               </div>
 
               <button
-                onClick={() => {
-                  setCheckoutStep(1)
-                  setShowCheckoutModal(true)
-                }}
+                type="button"
+                onClick={() => setShowPaymentModal(true)}
                 className="w-full bg-[#2563eb] hover:bg-blue-600 text-white font-bold text-sm py-3 rounded-xl transition cursor-pointer shadow-lg"
               >
                 Pagar e finalizar
@@ -533,10 +440,10 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
           ) : messages.length === 0 ? (
             <div className="text-center text-xs text-neutral-500 py-8">Nenhuma mensagem encontrada.</div>
           ) : (
-            messages.map((msg) => {
+            messages.map((msg, idx) => {
               const isMe = msg.sender_type === currentUserType
               return (
-                <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                <div key={msg.id ? `msg-${msg.id}` : `msg-idx-${idx}`} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                   <div className={`max-w-[80%] rounded-lg px-3.5 py-2 text-xs relative ${isMe ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-neutral-200 rounded-tl-none'}`}>
                     {!isMe && <span className="block text-[10px] font-bold text-[#eab308] mb-0.5">{msg.sender_name}</span>}
                     <p className="leading-relaxed break-words">{msg.content || msg.text}</p>
@@ -554,7 +461,7 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
 
         {/* Input da Mensagem */}
         <form onSubmit={handleSendMessage} className="bg-[#202c33] p-3 flex items-center gap-2 border-t border-neutral-800">
-          <input 
+          <input
             type="text"
             disabled={requestStatus === 'CONCLUIDO'}
             value={newMessage}
@@ -562,7 +469,7 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
             placeholder={requestStatus === 'CONCLUIDO' ? 'Serviço concluído' : 'Digite uma mensagem...'}
             className="flex-1 bg-[#2a3942] text-white placeholder-neutral-400 text-xs rounded-lg px-4 py-3 focus:outline-none focus:ring-1 focus:ring-[#00a884] disabled:opacity-50"
           />
-          <button 
+          <button
             type="submit"
             disabled={!newMessage.trim() || requestStatus === 'CONCLUIDO'}
             className="bg-[#00a884] hover:bg-[#008f70] text-black font-bold p-3 rounded-lg transition disabled:opacity-50 cursor-pointer"
@@ -571,131 +478,30 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
           </button>
         </form>
 
+        {/* RODAPÉ DO CHAT (SUPORTE VIA WHATSAPP) */}
+        <div className="bg-[#111b21] px-4 py-2 border-t border-neutral-800 flex items-center justify-between text-[11px] text-neutral-400">
+          <span>Precisa de ajuda com este pedido?</span>
+          <a
+            href="https://wa.me/5532984521595?text=Ol%C3%A1%2C%20preciso%20de%20suporte%20em%20rela%C3%A7%C3%A3o%20ao%20meu%20atendimento."
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#00a884] hover:underline font-bold flex items-center gap-1 cursor-pointer"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+            Falar com Suporte
+          </a>
+        </div>
+
         {/* MODAL CHECKOUT EM ETAPAS */}
-        {showCheckoutModal && paymentData && (
-          <div className="absolute inset-0 bg-black/90 flex items-center justify-center p-4 z-50">
-            <div className="bg-[#18181b] border border-neutral-800 rounded-2xl max-w-md w-full p-6 text-white space-y-5 relative">
-              <button 
-                onClick={() => setShowCheckoutModal(false)} 
-                className="absolute top-4 right-4 text-neutral-400 hover:text-white cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-
-              {/* ETAPA 1 */}
-              {checkoutStep === 1 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-bold text-white">Resumo da compra</h3>
-                  <div className="space-y-2 text-xs border-b border-neutral-800 pb-4">
-                    <div className="flex justify-between text-neutral-300">
-                      <span>Produto / Serviço</span>
-                      <span>R$ {parseFloat(paymentData.amount).toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-emerald-400">
-                      <span>Garantia de Custódia</span>
-                      <span>Grátis</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-baseline pt-2">
-                    <span className="text-base font-bold">Total</span>
-                    <span className="text-xl font-black text-white">R$ {parseFloat(paymentData.amount).toFixed(2)}</span>
-                  </div>
-                  <button
-                    onClick={() => setCheckoutStep(2)}
-                    className="w-full bg-[#2563eb] hover:bg-blue-600 text-white font-bold text-sm py-3 rounded-xl transition cursor-pointer"
-                  >
-                    Pagar e finalizar
-                  </button>
-                </div>
-              )}
-
-              {/* ETAPA 2 */}
-              {checkoutStep === 2 && (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-bold">Meios de pagamento</h3>
-                  <div className="space-y-3">
-                    <label 
-                      onClick={() => setSelectedMethod('PIX')}
-                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${selectedMethod === 'PIX' ? 'border-[#2563eb] bg-[#2563eb]/10' : 'border-neutral-800 bg-neutral-900'}`}
-                    >
-                      <input type="radio" name="paymentMethod" checked={selectedMethod === 'PIX'} onChange={() => {}} className="accent-[#2563eb]" />
-                      <QrCode className="w-5 h-5 text-emerald-400" />
-                      <span className="text-xs font-bold">Pix</span>
-                    </label>
-
-                    <label 
-                      onClick={() => setSelectedMethod('CARTAO')}
-                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${selectedMethod === 'CARTAO' ? 'border-[#2563eb] bg-[#2563eb]/10' : 'border-neutral-800 bg-neutral-900'}`}
-                    >
-                      <input type="radio" name="paymentMethod" checked={selectedMethod === 'CARTAO'} onChange={() => {}} className="accent-[#2563eb]" />
-                      <CreditCard className="w-5 h-5 text-blue-400" />
-                      <span className="text-xs font-bold">Cartão de Crédito</span>
-                    </label>
-
-                    <label 
-                      onClick={() => setSelectedMethod('BOLETO')}
-                      className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition ${selectedMethod === 'BOLETO' ? 'border-[#2563eb] bg-[#2563eb]/10' : 'border-neutral-800 bg-neutral-900'}`}
-                    >
-                      <input type="radio" name="paymentMethod" checked={selectedMethod === 'BOLETO'} onChange={() => {}} className="accent-[#2563eb]" />
-                      <FileText className="w-5 h-5 text-yellow-400" />
-                      <span className="text-xs font-bold">Boleto</span>
-                    </label>
-                  </div>
-
-                  <div className="flex gap-2 pt-2">
-                    <button onClick={() => setCheckoutStep(1)} className="flex-1 bg-neutral-800 text-xs py-3 rounded-xl font-bold cursor-pointer">Voltar</button>
-                    <button onClick={() => setCheckoutStep(3)} className="flex-1 bg-[#2563eb] text-xs py-3 rounded-xl font-bold cursor-pointer">Continuar</button>
-                  </div>
-                </div>
-              )}
-
-              {/* ETAPA 3 */}
-              {checkoutStep === 3 && (
-                <div className="space-y-4 text-center">
-                  <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center mx-auto">
-                    <QrCode className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-base font-bold">Pague R$ {parseFloat(paymentData.amount).toFixed(2)} via Pix</h3>
-
-                  {/* QR Code Válido */}
-                  <div className="bg-white p-3 rounded-xl max-w-[200px] mx-auto shadow-md">
-                    <img src={qrCodeUrl} alt="QR Code PIX" className="w-full h-auto block rounded" />
-                  </div>
-
-                  {/* Código Pix Copia e Cola */}
-                  <div className="space-y-2 text-left">
-                    <p className="text-xs font-bold text-neutral-300">Código Pix Copia e Cola:</p>
-                    <div className="bg-neutral-900 border border-neutral-800 p-2.5 rounded-lg text-[10px] font-mono break-all text-neutral-400 max-h-16 overflow-y-auto">
-                      {pixCode}
-                    </div>
-                    <button
-                      onClick={handleCopyPix}
-                      className="w-full bg-[#2563eb] hover:bg-blue-600 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-2 cursor-pointer transition"
-                    >
-                      {copiedPix ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                      {copiedPix ? 'Código copiado!' : 'Copiar código'}
-                    </button>
-                  </div>
-
-                  {/* BOTÃO DE SIMULAÇÃO DE TESTE */}
-                  <div className="pt-2 border-t border-neutral-800 space-y-2">
-                    <p className="text-[11px] text-amber-400 flex items-center justify-center gap-1 font-medium">
-                      <Sparkles className="w-3.5 h-3.5" /> Modo Demonstrativo de Testes:
-                    </p>
-                    <button
-                      onClick={handleSimulateSuccessfulPayment}
-                      disabled={simulatingPayment}
-                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs py-3 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-lg transition"
-                    >
-                      {simulatingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : '🧪 Simular Pagamento Confirmado'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-            </div>
-          </div>
-        )}
+          {showPaymentModal && paymentData && (
+            <PaymentModal
+              requestId={request.id}
+              amount={paymentData.amount}
+              professionalId={request.professional_id}
+              clientId={request.client_id}
+              onClose={() => setShowPaymentModal(false)}
+            />
+          )}
 
         {/* Modal: Profissional Define Valor */}
         {showPriceModal && (
@@ -716,8 +522,8 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setShowPriceModal(false)} className="flex-1 bg-neutral-800 text-white text-xs py-2.5 rounded font-bold">Cancelar</button>
-                  <button type="submit" className="flex-1 bg-[#00a884] text-black text-xs py-2.5 rounded font-bold">Enviar Cobrança</button>
+                  <button type="button" onClick={() => setShowPriceModal(false)} className="flex-1 bg-neutral-800 text-white text-xs py-2.5 rounded font-bold cursor-pointer">Cancelar</button>
+                  <button type="submit" className="flex-1 bg-[#00a884] hover:bg-[#008f70] text-black text-xs py-2.5 rounded font-bold cursor-pointer">Enviar Cobrança</button>
                 </div>
               </form>
             </div>

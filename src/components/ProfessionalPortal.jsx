@@ -2,10 +2,14 @@ import React, { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { updateProfile } from '../services/profiles'
 import { ChatModal } from './ChatModal'
+import { WalletModal } from './WalletModal'
+import { PlansModal } from './PlansModal'
+import { PaymentModal } from './PaymentModal'
+import { CustomAlert } from './CustomAlert'
 import { 
   Inbox, Image as ImageIcon, Settings, LogOut, 
   Trash2, Save, Clock, Loader2, ArrowLeft, Upload,
-  CheckCircle, MessageSquare, User, Camera 
+  CheckCircle, MessageSquare, User, Camera, Wallet, Crown 
 } from 'lucide-react'
 
 export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
@@ -16,6 +20,21 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
   const [saving, setSaving] = useState(false)
   const [uploadingGallery, setUploadingGallery] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+
+  // Controle de Notificações / Alertas Customizados
+  const [alertConfig, setAlertConfig] = useState({
+    isOpen: false,
+    type: 'info',
+    title: '',
+    message: ''
+  })
+
+  // Controle da Carteira de Saques
+  const [showWalletModal, setShowWalletModal] = useState(false)
+
+  // Controle de Planos e Pagamentos
+  const [showPlansModal, setShowPlansModal] = useState(false)
+  const [selectedPlanForPayment, setSelectedPlanForPayment] = useState(null)
 
   // Estado para controlar o chat aberto
   const [selectedChatRequest, setSelectedChatRequest] = useState(null)
@@ -31,6 +50,16 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
 
   const galleryFileInputRef = useRef(null)
   const avatarFileInputRef = useRef(null)
+
+  // Função auxiliar para disparar o CustomAlert
+  const showAlert = (message, type = 'info', title = '') => {
+    setAlertConfig({
+      isOpen: true,
+      type,
+      title,
+      message
+    })
+  }
 
   useEffect(() => {
     if (user) {
@@ -73,9 +102,77 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
     setLoading(false)
   }
 
-  // Aceitar solicitação de serviço
+  // Manipulador para escolha de planos (Grátis vs Pagos)
+  const handleSelectPlan = async (plan) => {
+    setShowPlansModal(false)
+
+    // Se o profissional escolher o Mês de Teste Grátis
+    if (plan.id === 'FREE') {
+      try {
+        // 1. Verifica se já utilizou o teste grátis no passado
+        const { data: usedFree } = await supabase
+          .from('subscriptions')
+          .select('id')
+          .eq('professional_id', user.id)
+          .eq('plan_name', 'FREE')
+          .maybeSingle()
+
+        if (usedFree) {
+          showAlert('Você já utilizou o seu mês gratuito de teste. Escolha um dos planos pagos para continuar!', 'error', 'Teste Já Utilizado')
+          setShowPlansModal(true)
+          return
+        }
+
+        // 2. Calcula 30 dias a partir de hoje
+        const expiresAt = new Date()
+        expiresAt.setDate(expiresAt.getDate() + 30)
+
+        // 3. Cadastra o plano FREE ativo no Supabase
+        const { error } = await supabase
+          .from('subscriptions')
+          .insert({
+            professional_id: user.id,
+            plan_name: 'FREE',
+            amount: 0,
+            status: 'ATIVO',
+            starts_at: new Date().toISOString(),
+            expires_at: expiresAt.toISOString(),
+          })
+
+        if (error) throw error
+
+        showAlert('Seu mês de teste gratuito foi ativado com sucesso! Aproveite os próximos 30 dias.', 'success', 'Parabéns!')
+      } catch (err) {
+        showAlert('Erro ao ativar teste gratuito. Tente novamente.', 'error', 'Erro')
+        console.error(err)
+      }
+      return
+    }
+
+    // Se for um plano pago, encaminha para o checkout
+    setSelectedPlanForPayment(plan)
+  }
+
+  // Aceitar solicitação de serviço (com verificação de plano ativo)
   const handleAcceptRequest = async (requestId) => {
     try {
+      // 1. Verifica se o profissional tem assinatura ATIVA e dentro da validade
+      const { data: activeSub } = await supabase
+        .from('subscriptions')
+        .select('id')
+        .eq('professional_id', user.id)
+        .eq('status', 'ATIVO')
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle()
+
+      // 2. Se não tiver plano ativo, bloqueia a ação e abre a escolha de planos
+      if (!activeSub) {
+        showAlert('Você precisa de um plano ativo para aceitar novos trabalhos!', 'warning', 'Plano Necessário')
+        setShowPlansModal(true)
+        return
+      }
+
+      // 3. Se tiver plano ativo, atualiza a solicitação para ACEITO
       const { error } = await supabase
         .from('requests')
         .update({ status: 'ACEITO' })
@@ -87,8 +184,32 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
         prev.map((r) => (r.id === requestId ? { ...r, status: 'ACEITO' } : r))
       )
     } catch (err) {
-      alert('Erro ao aceitar solicitação.')
+      showAlert('Erro ao aceitar solicitação.', 'error', 'Falha')
       console.error(err)
+    }
+  }
+
+  // Abrir Chat (com verificação de plano ativo)
+  const handleOpenChat = async (req) => {
+    try {
+      const { data: activeSub } = await supabase
+        .from('subscriptions')
+        .select('id')
+        .eq('professional_id', user.id)
+        .eq('status', 'ATIVO')
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle()
+
+      if (!activeSub) {
+        showAlert('Sua assinatura não está ativa. Assine um plano para continuar conversando com os clientes!', 'warning', 'Assinatura Necessária')
+        setShowPlansModal(true)
+        return
+      }
+
+      setSelectedChatRequest(req)
+    } catch (err) {
+      console.error('Erro ao verificar assinatura:', err)
+      setSelectedChatRequest(req)
     }
   }
 
@@ -118,7 +239,7 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
 
       await updateProfile(user.id, { avatar_url: publicUrl })
     } catch (error) {
-      alert('Erro ao enviar foto de perfil. Verifique se o bucket "avatars" existe no Supabase Storage.')
+      showAlert('Erro ao enviar foto de perfil. Verifique se o bucket "avatars" existe no Supabase Storage.', 'error', 'Erro no Upload')
       console.error(error)
     } finally {
       setUploadingAvatar(false)
@@ -155,7 +276,7 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
 
       await updateProfile(user.id, { gallery: updatedGallery })
     } catch (error) {
-      alert('Erro ao enviar imagem. Verifique se o bucket "gallery" foi criado no Supabase.')
+      showAlert('Erro ao enviar imagem. Verifique se o bucket "gallery" foi criado no Supabase.', 'error', 'Erro no Upload')
       console.error(error)
     } finally {
       setUploadingGallery(false)
@@ -188,9 +309,9 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
         bio: bio,
         gallery: gallery,
       })
-      alert('Configurações salvas com sucesso!')
+      showAlert('Configurações salvas com sucesso!', 'success', 'Perfil Atualizado')
     } catch (err) {
-      alert('Erro ao salvar alterações.')
+      showAlert('Erro ao salvar alterações.', 'error', 'Erro')
       console.error(err)
     } finally {
       setSaving(false)
@@ -242,6 +363,29 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
         
         {/* Menu Lateral */}
         <aside className="space-y-2">
+          
+          {/* BOTÃO PLANOS DE ASSINATURA */}
+          <button
+            onClick={() => setShowPlansModal(true)}
+            className="w-full flex items-center justify-between p-3.5 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-black shadow-lg mb-2"
+          >
+            <div className="flex items-center gap-2.5">
+              <Crown className="w-4 h-4" />
+              <span>Planos & Assinaturas</span>
+            </div>
+          </button>
+
+          {/* BOTÃO DA CARTEIRA & SAQUES */}
+          <button
+            onClick={() => setShowWalletModal(true)}
+            className="w-full flex items-center justify-between p-3.5 rounded-lg text-xs font-black uppercase tracking-wider transition cursor-pointer bg-[#00a884] hover:bg-[#008f70] text-black shadow-lg mb-4"
+          >
+            <div className="flex items-center gap-2.5">
+              <Wallet className="w-4 h-4" />
+              <span>Minha Carteira / Saques</span>
+            </div>
+          </button>
+
           <button
             onClick={() => setActiveTab('requests')}
             className={`w-full flex items-center justify-between p-3.5 rounded-lg text-xs font-bold uppercase tracking-wider transition cursor-pointer ${
@@ -335,7 +479,7 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
                             {req.status === 'ACEITO' || req.status === 'AGUARDANDO_CONCLUSAO' ? (
                               <button 
                                 key={`chat-btn-${req.id}`}
-                                onClick={() => setSelectedChatRequest(req)}
+                                onClick={() => handleOpenChat(req)}
                                 className="bg-[#00a884] hover:bg-[#008f70] text-black font-black uppercase text-xs px-4 py-2.5 rounded flex items-center gap-2 transition cursor-pointer"
                               >
                                 <MessageSquare className="w-4 h-4" />
@@ -344,7 +488,7 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
                             ) : req.status === 'CONCLUIDO' ? (
                               <button 
                                 key={`chat-btn-concluido-${req.id}`}
-                                onClick={() => setSelectedChatRequest(req)}
+                                onClick={() => handleOpenChat(req)}
                                 className="bg-neutral-800 hover:bg-neutral-700 text-white font-black uppercase text-xs px-4 py-2.5 rounded flex items-center gap-2 border border-neutral-700 transition cursor-pointer"
                               >
                                 <MessageSquare className="w-4 h-4 text-[#00a884]" />
@@ -573,6 +717,42 @@ export function ProfessionalPortal({ user, onLogout, onGoToPublicSite }) {
           onClose={() => setSelectedChatRequest(null)}
         />
       )}
+
+      {/* MODAL DA CARTEIRA & SOLICITAÇÃO DE SAQUES */}
+      {showWalletModal && (
+        <WalletModal 
+          professionalId={user.id} 
+          onClose={() => setShowWalletModal(false)} 
+        />
+      )}
+
+      {/* MODAL DE SELEÇÃO DE PLANOS */}
+      {showPlansModal && (
+        <PlansModal 
+          onClose={() => setShowPlansModal(false)} 
+          onSelectPlan={handleSelectPlan}
+        />
+      )}
+
+      {/* MODAL DE PAGAMENTO DO PLANO */}
+      {selectedPlanForPayment && (
+        <PaymentModal
+          requestId={`SUB_${selectedPlanForPayment.id}_${Date.now()}`}
+          amount={selectedPlanForPayment.price}
+          professionalId={user.id}
+          clientId={user.id}
+          onClose={() => setSelectedPlanForPayment(null)}
+        />
+      )}
+
+      {/* ALERTA CUSTOMIZADO */}
+      <CustomAlert 
+        isOpen={alertConfig.isOpen}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertConfig((prev) => ({ ...prev, isOpen: false }))}
+      />
 
     </div>
   )
