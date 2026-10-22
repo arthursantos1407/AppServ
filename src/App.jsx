@@ -7,11 +7,17 @@ import { RegisterView } from './components/RegisterView'
 import { LoginView } from './components/LoginView'
 import { ProfessionalPortal } from './components/ProfessionalPortal'
 import { ClientPortal } from './components/ClientPortal'
+import { MercadoPagoCallback } from './pages/MercadoPagoCallback'
 import { Footer } from './components/Footer'
 import { fetchProfiles } from './services/profiles'
 import { supabase } from './lib/supabase'
 
 export default function App() {
+  // Verifica se o endereço atual é a rota do Callback do Mercado Pago
+  if (window.location.pathname === '/mp-callback') {
+    return <MercadoPagoCallback />
+  }
+
   const [currentView, setView] = useState('home')
   const [profiles, setProfiles] = useState([])
   const [selectedProfessional, setSelectedProfessional] = useState(null)

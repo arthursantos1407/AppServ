@@ -2,11 +2,16 @@ import React, { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { 
   Wallet, ArrowDownCircle, Clock, CheckCircle2, AlertCircle, 
-  X, Send, Loader2, Lock, ShieldCheck, Check
+  X, Send, Loader2, Lock, ShieldCheck, Check, ExternalLink
 } from 'lucide-react'
+
+// SUBSTITUA PELOS SEUS DADOS DO MERCADO PAGO
+const MP_CLIENT_ID = '7863490109007036'
+const MP_REDIRECT_URI = window.location.origin + '/mp-callback'
 
 export function WalletModal({ professionalId, onClose }) {
   const [wallet, setWallet] = useState({ pending_balance: 0, available_balance: 0 })
+  const [profile, setProfile] = useState(null)
   const [withdrawals, setWithdrawals] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -16,7 +21,6 @@ export function WalletModal({ professionalId, onClose }) {
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
 
-  // Estado para controlar a Tela de Sucesso (24h)
   const [successData, setSuccessData] = useState(null)
 
   useEffect(() => {
@@ -28,30 +32,47 @@ export function WalletModal({ professionalId, onClose }) {
   const loadWalletData = async () => {
     setLoading(true)
     try {
+      // Carrega dados do perfil (para checar se o Mercado Pago está conectado)
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('mp_connected, mp_user_id')
+        .eq('id', professionalId)
+        .maybeSingle()
+
+      if (profileData) setProfile(profileData)
+
+      // Carrega carteira
       const { data: walletData } = await supabase
         .from('wallets')
         .select('*')
         .eq('professional_id', professionalId)
         .maybeSingle()
 
-      if (walletData) {
-        setWallet(walletData)
-      }
+      if (walletData) setWallet(walletData)
 
+      // Carrega histórico de saques
       const { data: withdrawalsData } = await supabase
         .from('withdrawals')
         .select('*')
         .eq('professional_id', professionalId)
         .order('created_at', { ascending: false })
 
-      if (withdrawalsData) {
-        setWithdrawals(withdrawalsData)
-      }
+      if (withdrawalsData) setWithdrawals(withdrawalsData)
+
     } catch (err) {
       console.error('Erro ao carregar carteira:', err)
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleConnectMercadoPago = () => {
+    if (!MP_CLIENT_ID || MP_CLIENT_ID === 'O_SEU_CLIENT_ID_AQUI') {
+      return setErrorMessage('Configure o MP_CLIENT_ID no ficheiro WalletModal.jsx')
+    }
+
+    const authUrl = `https://auth.mercadopago.com.br/authorization?client_id=${MP_CLIENT_ID}&response_type=code&platform_id=mp&redirect_uri=${encodeURIComponent(MP_REDIRECT_URI)}&state=${professionalId}`
+    window.location.href = authUrl
   }
 
   const handleRequestWithdrawal = async (e) => {
@@ -76,37 +97,40 @@ export function WalletModal({ professionalId, onClose }) {
     setSubmitting(true)
 
     try {
-      const { data, error } = await supabase.functions.invoke('process-withdrawal', {
-        body: {
+      const { error: withdrawError } = await supabase
+        .from('withdrawals')
+        .insert({
+          professional_id: professionalId,
           amount: amountNum,
-          pixKey: pixKey.trim(),
-          pixType: pixType
-        }
-      })
+          pix_key: pixKey.trim(),
+          pix_type: pixType,
+          status: 'PENDENTE',
+          created_at: new Date().toISOString()
+        })
 
-      if (error) {
-        throw new Error(error.message || 'Falha de comunicação com o servidor.')
-      }
+      if (withdrawError) throw withdrawError
 
-      if (data && data.success === false) {
-        throw new Error(data.error || 'Não foi possível concluir a solicitação.')
-      }
+      const newAvailableBalance = Math.max(0, availableNum - amountNum)
+      const { error: walletError } = await supabase
+        .from('wallets')
+        .update({ available_balance: newAvailableBalance })
+        .eq('professional_id', professionalId)
 
-      // Ativa a tela de sucesso com as informações do saque
+      if (walletError) throw walletError
+
       setSuccessData({
         amount: amountNum,
         pixKey: pixKey.trim(),
         pixType: pixType
       })
 
-      // Limpa formulário e recarrega saldos
       setWithdrawAmount('')
       setPixKey('')
       loadWalletData()
 
     } catch (err) {
       console.error('Erro no saque:', err)
-      setErrorMessage(String(err?.message || err))
+      setErrorMessage(String(err?.message || 'Erro ao registrar solicitação de saque.'))
     } finally {
       setSubmitting(false)
     }
@@ -124,7 +148,7 @@ export function WalletModal({ professionalId, onClose }) {
             </div>
             <div>
               <h3 className="text-base font-bold text-white">Minha Carteira & Saques</h3>
-              <p className="text-xs text-neutral-400">Gerencie seus ganhos e solicite transferências</p>
+              <p className="text-xs text-neutral-400">Gerencie seus ganhos e recebimentos automáticos</p>
             </div>
           </div>
           <button 
@@ -145,25 +169,18 @@ export function WalletModal({ professionalId, onClose }) {
               <span className="text-xs">Carregando dados da carteira...</span>
             </div>
           ) : successData ? (
-            /* ------------------------------------------------------------- */
-            /* TELA DE AVISO / SUCESSO (24 HORAS)                           */
-            /* ------------------------------------------------------------- */
             <div key="view-success" className="py-6 px-4 text-center space-y-6 animate-in fade-in zoom-in-95 duration-200">
-              
               <div className="w-16 h-16 bg-[#00a884]/20 text-[#00a884] border border-[#00a884]/30 rounded-full flex items-center justify-center mx-auto shadow-lg shadow-[#00a884]/10">
                 <Check className="w-8 h-8 stroke-[3]" />
               </div>
 
               <div className="space-y-2">
-                <h4 className="text-xl font-black text-white">
-                  Saque Solicitado com Sucesso!
-                </h4>
+                <h4 className="text-xl font-black text-white">Saque Solicitado com Sucesso!</h4>
                 <p className="text-sm text-neutral-300 max-w-md mx-auto leading-relaxed">
-                  A sua solicitação de transferência foi enviada para o nosso sistema. O pagamento cairá na sua conta em <span className="text-[#00a884] font-bold">até 24 horas</span>.
+                  A sua solicitação de transferência foi enviada. O pagamento cairá na sua conta em <span className="text-[#00a884] font-bold">até 24 horas</span>.
                 </p>
               </div>
 
-              {/* Detalhes do Saque */}
               <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 max-w-md mx-auto space-y-3 text-left text-xs">
                 <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
                   <span className="text-neutral-400">Valor Solicitado:</span>
@@ -190,17 +207,50 @@ export function WalletModal({ professionalId, onClose }) {
               >
                 Entendido / Voltar à Carteira
               </button>
-
             </div>
           ) : (
-            /* ------------------------------------------------------------- */
-            /* PAINEL NORMAL DA CARTEIRA & FORMULÁRIO                        */
-            /* ------------------------------------------------------------- */
             <div key="view-form" className="space-y-6">
-              
+
+              {/* CARD DE LIGAÇÃO AO MERCADO PAGO */}
+              {profile?.mp_connected ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2.5 text-emerald-400 font-bold">
+                    <CheckCircle2 className="w-5 h-5 shrink-0" />
+                    <div>
+                      <p className="text-white font-bold">Conta Mercado Pago Conectada</p>
+                      <p className="text-[11px] text-neutral-400 font-normal">
+                        Os pagamentos de serviços efetuados por clientes caem automaticamente na sua conta.
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] bg-emerald-500 text-black px-2.5 py-1 rounded font-black uppercase shrink-0">
+                    Ativo
+                  </span>
+                </div>
+              ) : (
+                <div className="bg-neutral-900 border border-amber-500/30 rounded-xl p-4 space-y-3">
+                  <div className="flex items-start gap-2 text-xs text-amber-400">
+                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block text-white">Receba pagamentos automaticamente</span>
+                      <span className="text-neutral-400 text-[11px]">
+                        Conecte a sua conta do Mercado Pago para receber o valor dos serviços contratados pelos clientes na hora, sem precisar solicitar saques manuais.
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleConnectMercadoPago}
+                    className="w-full bg-[#009EE3] hover:bg-[#008ebb] text-white font-extrabold text-xs py-3 rounded-xl transition flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Conectar Conta do Mercado Pago
+                  </button>
+                </div>
+              )}
+
               {/* Cards de Saldo */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                
                 <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 space-y-2 relative overflow-hidden">
                   <div className="flex justify-between items-center text-xs font-bold text-amber-400">
                     <span className="flex items-center gap-1.5">
@@ -213,7 +263,7 @@ export function WalletModal({ professionalId, onClose }) {
                     R$ {parseFloat(wallet.pending_balance || 0).toFixed(2)}
                   </div>
                   <p className="text-[11px] text-neutral-400">
-                    Ganhos de serviços em andamento. Liberados assim que o cliente confirmar a conclusão.
+                    Ganhos de serviços em andamento.
                   </p>
                 </div>
 
@@ -229,13 +279,11 @@ export function WalletModal({ professionalId, onClose }) {
                     R$ {parseFloat(wallet.available_balance || 0).toFixed(2)}
                   </div>
                   <p className="text-[11px] text-neutral-400">
-                    Valor líquido (já com o desconto da taxa de 5% da plataforma).
+                    Saldo residual disponível para transferência manual via Pix.
                   </p>
                 </div>
-
               </div>
 
-              {/* Mensagem de Erro */}
               {errorMessage && (
                 <div key="err-alert" className="p-3 rounded-xl text-xs flex items-center gap-2 border bg-red-500/10 border-red-500/30 text-red-400">
                   <AlertCircle className="w-4 h-4 shrink-0" />
@@ -243,11 +291,11 @@ export function WalletModal({ professionalId, onClose }) {
                 </div>
               )}
 
-              {/* Formulário de Saque */}
+              {/* Formulário de Saque (Manual/Fallback) */}
               <form onSubmit={handleRequestWithdrawal} className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
                 <h4 className="text-sm font-bold text-white flex items-center gap-2 border-b border-neutral-800 pb-3">
                   <ArrowDownCircle className="w-4 h-4 text-[#00a884]" />
-                  Solicitar Transferência via Pix
+                  Solicitar Transferência Pix
                 </h4>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -313,7 +361,7 @@ export function WalletModal({ professionalId, onClose }) {
                 </button>
               </form>
 
-              {/* Histórico de Saques */}
+              {/* Histórico */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-neutral-400 uppercase tracking-wider">
                   Histórico de Saques
@@ -352,7 +400,7 @@ export function WalletModal({ professionalId, onClose }) {
                             </span>
                           ) : (
                             <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-md font-bold text-[10px] flex items-center gap-1">
-                              <Clock className="w-3 h-3 animate-pulse" /> Processando
+                              <Clock className="w-3.5 h-3.5 animate-pulse" /> Processando
                             </span>
                           )}
                         </div>
@@ -361,6 +409,7 @@ export function WalletModal({ professionalId, onClose }) {
                   </div>
                 )}
               </div>
+
             </div>
           )}
 
