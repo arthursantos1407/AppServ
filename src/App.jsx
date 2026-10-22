@@ -14,9 +14,9 @@ import { supabase } from './lib/supabase'
 
 export default function App() {
   // Verifica se o endereço atual é a rota do Callback do Mercado Pago
-  if (window.location.pathname === '/mp-callback') {
-    return <MercadoPagoCallback />
-  }
+ if (window.location.pathname.startsWith('/mp-callback')) {
+  return <MercadoPagoCallback />
+}
 
   const [currentView, setView] = useState('home')
   const [profiles, setProfiles] = useState([])
