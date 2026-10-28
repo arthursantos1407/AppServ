@@ -482,7 +482,7 @@ export function ChatModal({ request, currentUserType, senderName, onClose }) {
         <div className="bg-[#111b21] px-4 py-2 border-t border-neutral-800 flex items-center justify-between text-[11px] text-neutral-400">
           <span>Precisa de ajuda com este pedido?</span>
           <a
-            href="https://wa.me/5532984521595?text=Ol%C3%A1%2C%20preciso%20de%20suporte%20em%20rela%C3%A7%C3%A3o%20ao%20meu%20atendimento."
+            href="https://wa.me/553298640317?text=Ol%C3%A1%2C%20preciso%20de%20suporte%20em%20rela%C3%A7%C3%A3o%20ao%20meu%20atendimento."
             target="_blank"
             rel="noopener noreferrer"
             className="text-[#00a884] hover:underline font-bold flex items-center gap-1 cursor-pointer"
