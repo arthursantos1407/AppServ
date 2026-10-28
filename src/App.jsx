@@ -9,6 +9,8 @@ import { ProfessionalPortal } from './components/ProfessionalPortal'
 import { ClientPortal } from './components/ClientPortal'
 import { MercadoPagoCallback } from './components/MercadoPagoCallback'
 import { AdminPortal } from './components/AdminPortal'
+import { PrivacyPolicyView } from './components/PrivacyPolicyView'
+import { NotFoundView } from './components/NotFoundView'
 import { Footer } from './components/Footer'
 import { fetchProfiles } from './services/profiles'
 import { supabase } from './lib/supabase'
@@ -27,6 +29,11 @@ export default function App() {
   const [userRole, setUserRole] = useState(null) // 'client' | 'professional' | 'admin'
 
   useEffect(() => {
+    // Detecta se a rota na URL é /privacidade
+    if (window.location.pathname.startsWith('/privacidade')) {
+      setView('privacidade')
+    }
+
     // Verifica utilizador autenticado ao carregar a página
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user)
@@ -97,7 +104,7 @@ export default function App() {
     setUser(null)
     setUserRole(null)
     setView('home')
-    if (window.location.pathname.startsWith('/admin')) {
+    if (window.location.pathname.startsWith('/admin') || window.location.pathname.startsWith('/privacidade')) {
       window.history.pushState({}, '', '/')
     }
   }
@@ -146,6 +153,10 @@ export default function App() {
       />
     )
   }
+
+  // Listagem de telas válidas para fallback do 404
+  const validViews = ['home', 'profissionais', 'perfil', 'cadastrar', 'login', 'privacidade']
+  const isNotFound = !validViews.includes(currentView)
 
   // 4. VISÃO PÚBLICA DO SITE
   return (
@@ -210,6 +221,24 @@ export default function App() {
                   setView('portal')
                 }
               }} 
+            />
+          )}
+
+          {currentView === 'privacidade' && (
+            <PrivacyPolicyView 
+              onBack={() => {
+                if (window.location.pathname.startsWith('/privacidade')) {
+                  window.history.pushState({}, '', '/')
+                }
+                setView('home')
+              }} 
+            />
+          )}
+
+          {isNotFound && (
+            <NotFoundView 
+              onGoHome={() => setView('home')} 
+              onGoSearch={() => setView('profissionais')} 
             />
           )}
         </main>
