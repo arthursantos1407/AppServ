@@ -111,7 +111,10 @@ export function ClientPortal({ user, onLogout, onGoToPublicSite }) {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {requests.map((req) => {
                   const isCompleted = req.status === 'CONCLUIDO'
-                  const canOpenChat = ['ACEITO', 'AGUARDANDO_CONCLUSAO'].includes(req.status)
+                  
+                  // CORREÇÃO AQUI: Incluído 'EM_ANDAMENTO' no array
+                  const canOpenChat = ['ACEITO', 'EM_ANDAMENTO', 'AGUARDANDO_CONCLUSAO'].includes(req.status)
+                  
                   const profName = req.professional?.full_name || 'Profissional'
                   const profCategory = req.professional?.category || 'Serviço Geral'
 
@@ -192,4 +195,4 @@ export function ClientPortal({ user, onLogout, onGoToPublicSite }) {
   )
 }
 
-export default ClientPortal;
+export default ClientPortal

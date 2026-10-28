@@ -7,26 +7,27 @@ import { RegisterView } from './components/RegisterView'
 import { LoginView } from './components/LoginView'
 import { ProfessionalPortal } from './components/ProfessionalPortal'
 import { ClientPortal } from './components/ClientPortal'
-import { MercadoPagoCallback } from './pages/MercadoPagoCallback'
+import { MercadoPagoCallback } from './components/MercadoPagoCallback'
+import { AdminPortal } from './components/AdminPortal'
 import { Footer } from './components/Footer'
 import { fetchProfiles } from './services/profiles'
 import { supabase } from './lib/supabase'
 
 export default function App() {
-  // Verifica se o endereço atual é a rota do Callback do Mercado Pago
- if (window.location.pathname.startsWith('/mp-callback')) {
-  return <MercadoPagoCallback />
-}
+  // 1. Verifica se o endereço atual é a rota do Callback do Mercado Pago
+  if (window.location.pathname.startsWith('/mp-callback')) {
+    return <MercadoPagoCallback />
+  }
 
   const [currentView, setView] = useState('home')
   const [profiles, setProfiles] = useState([])
   const [selectedProfessional, setSelectedProfessional] = useState(null)
   const [categoryFilter, setCategoryFilter] = useState(null)
   const [user, setUser] = useState(null)
-  const [userRole, setUserRole] = useState(null) // 'client' ou 'professional'
+  const [userRole, setUserRole] = useState(null) // 'client' | 'professional' | 'admin'
 
   useEffect(() => {
-    // 1. Verifica utilizador autenticado ao carregar a página
+    // Verifica utilizador autenticado ao carregar a página
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user)
       if (user) {
@@ -34,7 +35,7 @@ export default function App() {
       }
     })
 
-    // 2. Escuta alterações no estado de autenticação
+    // Escuta alterações no estado de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const currentUser = session?.user || null
       setUser(currentUser)
@@ -58,7 +59,6 @@ export default function App() {
       .eq('id', userId)
       .maybeSingle()
 
-    // Tenta obter da tabela 'profiles'. Se ainda não existir no momento, lê os metadados
     const resolvedRole = data?.role || userObj?.user_metadata?.role || 'client'
     setUserRole(resolvedRole)
     return resolvedRole
@@ -97,10 +97,37 @@ export default function App() {
     setUser(null)
     setUserRole(null)
     setView('home')
+    if (window.location.pathname.startsWith('/admin')) {
+      window.history.pushState({}, '', '/')
+    }
   }
 
-  // SE O UTILIZADOR ESTIVER LOGADO E NA VISÃO 'PORTAL'
+  // 2. ROTA DO PAINEL ADMINISTRATIVO (Via URL /admin ou Estado 'admin')
+  if (window.location.pathname.startsWith('/admin') || currentView === 'admin') {
+    return (
+      <AdminPortal 
+        onGoToPublicSite={() => {
+          if (window.location.pathname.startsWith('/admin')) {
+            window.history.pushState({}, '', '/')
+          }
+          setView('home')
+        }} 
+        onLogout={handleLogout}
+      />
+    )
+  }
+
+  // 3. SE O UTILIZADOR ESTIVER LOGADO E NA VISÃO 'PORTAL'
   if (user && currentView === 'portal') {
+    if (userRole === 'admin') {
+      return (
+        <AdminPortal 
+          onGoToPublicSite={() => setView('home')} 
+          onLogout={handleLogout} 
+        />
+      )
+    }
+
     if (userRole === 'client') {
       return (
         <ClientPortal 
@@ -120,7 +147,7 @@ export default function App() {
     )
   }
 
-  // VISÃO PÚBLICA DO SITE
+  // 4. VISÃO PÚBLICA DO SITE
   return (
     <div className="min-h-screen bg-[#0e0e0e] text-white flex flex-col justify-between">
       <div>
@@ -176,8 +203,12 @@ export default function App() {
             <LoginView 
               onLoginSuccess={async (loggedUser) => { 
                 setUser(loggedUser)
-                await fetchUserRole(loggedUser.id, loggedUser)
-                setView('portal')
+                const role = await fetchUserRole(loggedUser.id, loggedUser)
+                if (role === 'admin') {
+                  setView('admin')
+                } else {
+                  setView('portal')
+                }
               }} 
             />
           )}

@@ -97,6 +97,7 @@ export function WalletModal({ professionalId, onClose }) {
     setSubmitting(true)
 
     try {
+      // 1. Registra a solicitação na tabela withdrawals (Lida automaticamente pelo AdminPortal)
       const { error: withdrawError } = await supabase
         .from('withdrawals')
         .insert({
@@ -110,6 +111,7 @@ export function WalletModal({ professionalId, onClose }) {
 
       if (withdrawError) throw withdrawError
 
+      // 2. Atualiza o saldo disponível da carteira
       const newAvailableBalance = Math.max(0, availableNum - amountNum)
       const { error: walletError } = await supabase
         .from('wallets')
@@ -177,7 +179,7 @@ export function WalletModal({ professionalId, onClose }) {
               <div className="space-y-2">
                 <h4 className="text-xl font-black text-white">Saque Solicitado com Sucesso!</h4>
                 <p className="text-sm text-neutral-300 max-w-md mx-auto leading-relaxed">
-                  A sua solicitação de transferência foi enviada. O pagamento cairá na sua conta em <span className="text-[#00a884] font-bold">até 24 horas</span>.
+                  A sua solicitação foi enviada para processamento. O pagamento cairá na sua conta em <span className="text-[#00a884] font-bold">até 24 horas</span> após a aprovação.
                 </p>
               </div>
 
@@ -193,9 +195,9 @@ export function WalletModal({ professionalId, onClose }) {
                   <span className="font-mono text-white font-semibold">{successData.pixKey}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-neutral-400">Prazo Máximo:</span>
+                  <span className="text-neutral-400">Estado do Pedido:</span>
                   <span className="text-amber-400 font-bold flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5" /> Até 24 horas
+                    <Clock className="w-3.5 h-3.5 animate-pulse" /> Em Análise
                   </span>
                 </div>
               </div>
@@ -291,7 +293,7 @@ export function WalletModal({ professionalId, onClose }) {
                 </div>
               )}
 
-              {/* Formulário de Saque (Manual/Fallback) */}
+              {/* Formulário de Saque */}
               <form onSubmit={handleRequestWithdrawal} className="bg-neutral-900 border border-neutral-800 rounded-xl p-5 space-y-4">
                 <h4 className="text-sm font-bold text-white flex items-center gap-2 border-b border-neutral-800 pb-3">
                   <ArrowDownCircle className="w-4 h-4 text-[#00a884]" />
@@ -309,7 +311,7 @@ export function WalletModal({ professionalId, onClose }) {
                       <option value="CPF">CPF</option>
                       <option value="EMAIL">E-mail</option>
                       <option value="TELEFONE">Telefone</option>
-                      <option value="CHAVE_ALEATORIA">Chave Aleatória</option>
+                      <option value="CHAVE_ALEATORIA">Chave Aleatoria</option>
                     </select>
                   </div>
 
@@ -396,7 +398,7 @@ export function WalletModal({ professionalId, onClose }) {
                             </span>
                           ) : item.status === 'CANCELADO' ? (
                             <span className="bg-red-500/10 text-red-400 border border-red-500/30 px-2.5 py-1 rounded-md font-bold text-[10px]">
-                              Cancelado
+                              Recusado / Devolvido
                             </span>
                           ) : (
                             <span className="bg-amber-500/10 text-amber-400 border border-amber-500/30 px-2.5 py-1 rounded-md font-bold text-[10px] flex items-center gap-1">
