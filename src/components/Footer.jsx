@@ -161,7 +161,7 @@ export function Footer({ setView }) {
               onClick={() => handleNav('home')} 
               className="hover:text-neutral-300 transition cursor-pointer"
             >
-              Voltar para o topo
+              Voltar ao topo
             </button>
           </div>
         </div>
